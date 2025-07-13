@@ -1,0 +1,522 @@
+-- Zenith Gun Grounds FFA Script
+-- Organized version with better structure and notifications
+
+--> [< Services >] <--
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local mouse = LocalPlayer:GetMouse()
+
+--> [< UI Library >] <--
+local Library = nil
+local function InitializeUI()
+    local function LoadLibrary()
+        local success, lib = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/bitef4/Recode/main/UI/Kavo_1.lua"))()
+        end)
+        return success and lib or nil
+    end
+
+    Library = LoadLibrary()
+    if not Library then 
+        warn("Failed to load UI Library")
+        return false
+    end
+    return true
+end
+
+if not InitializeUI() then return end
+
+--> [< Notification System >] <--
+local Notification = {
+    Show = function(title, text, duration)
+        if Library and Library.Notify then
+            Library:Notify(title, text, duration or 5)
+        else
+            warn(title..": "..text)
+        end
+    end,
+    
+    ScriptLoaded = function()
+        Notification.Show("Zenith Gun Grounds", "Script loaded successfully!", 5)
+    end,
+    
+    FeatureToggle = function(feature, state)
+        Notification.Show(feature, state and "Enabled!" or "Disabled!", 3)
+    end,
+    
+    ValueChanged = function(feature, value, unit)
+        unit = unit or ""
+        Notification.Show(feature, "Set to "..tostring(value)..unit, 3)
+    end,
+    
+    Warning = function(message)
+        Notification.Show("Warning", message, 5)
+    end,
+    
+    Error = function(message)
+        Notification.Show("Error", message, 5)
+    end
+}
+
+--> [< Main Window >] <--
+local Window = Library.CreateLib("Zenith | Gun Grounds FFA", "Midnight")
+
+--> [< Configuration >] <--
+local Config = {
+    -- Aimbot
+    Aimbot = {
+        Enabled = false,
+        Smoothness = 10,
+        TargetPart = "Head",
+        FOV = 100,
+        RainbowFOV = false,
+        RainbowSpeed = 0.005,
+        Prediction = 0.065,
+        CurrentTarget = nil,
+        Aiming = false
+    },
+    
+    -- Gun Mods
+    GunMods = {
+        Enabled = false,
+        FireRate = 0.3,
+        PelletAmount = 1,
+        ReloadTime = 0,
+        DamageDropOff = 0,
+        IsAuto = true,
+        DelayedShell = false,
+        RecoilEnabled = false,
+        Recoil = Vector3.new(0, 0, 0)
+    },
+    
+    -- Movement
+    Movement = {
+        Speed = {
+            Enabled = false,
+            Amount = 20
+        },
+        Jump = {
+            Enabled = false,
+            Amount = 50,
+            Infinite = false
+        },
+        Fly = {
+            Enabled = false,
+            Speed = 50
+        },
+        Noclip = {
+            Enabled = false
+        },
+        AntiAim = {
+            Enabled = false,
+            SpinSpeed = 10
+        }
+    },
+    
+    -- Visuals
+    Visuals = {
+        Viewmodel = {
+            Enabled = false,
+            Offset = Vector3.new(0.1, -1.7, 0)
+        },
+        HitEffect = {
+            Enabled = false,
+            Effect = "Gib_F"
+        }
+    },
+    
+    -- State
+    State = {
+        Initialized = false,
+        Hue = 0,
+        FOVCircle = nil
+    }
+}
+
+--> [< UI Setup >] <--
+
+--- [ Home Tab ] ---
+local function SetupHomeTab()
+    local HomeTab = Window:NewTab("Home")
+    local HomeSection = HomeTab:NewSection("🔗 Info & Support")
+    local KeybindsSection = HomeTab:NewSection("🔑 Keybinds")
+
+    HomeSection:NewButton("📢 Join Discord", "Click to copy invite link", function()
+        if setclipboard then
+            setclipboard("https://discord.gg/b8WFc7ZNje")
+            Notification.Show("Discord", "Invite link copied to clipboard!")
+        else
+            Notification.Error("Clipboard access not available")
+        end
+    end)
+
+    HomeSection:NewLabel("Script Version: 2.0")
+    HomeSection:NewLabel("Game: Gun Grounds FFA")
+    HomeSection:NewLabel("Made for FFA mode")
+
+    KeybindsSection:NewKeybind("🔘 Toggle UI", "Show/Hide Menu", Enum.KeyCode.RightShift, function()
+        Library:ToggleUI()
+    end)
+
+    KeybindsSection:NewKeybind("🔘 Force Reset", "Reset your character", Enum.KeyCode.T, function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid:TakeDamage(LocalPlayer.Character.Humanoid.Health)
+            Notification.Show("Reset", "Character reset!")
+        end
+    end)
+end
+
+--- [ Gun Mods Tab ] ---
+local function SetupGunModsTab()
+    local GunModsTab = Window:NewTab("Gun Mods")
+    local GunStatsSection = GunModsTab:NewSection("📊 Gun Statistics")
+    local GunModsSection = GunModsTab:NewSection("⚙️ Gun Modifications")
+
+    GunModsSection:NewToggle("🔫 Enable Gun Mods", "Toggle all gun modifications", function(state)
+        Config.GunMods.Enabled = state
+        Notification.FeatureToggle("Gun Mods", state)
+    end)
+
+    GunStatsSection:NewLabel("Note: Reset your character after")
+    GunStatsSection:NewLabel("changing gun mods to apply them")
+
+    GunModsSection:NewSlider("🔫 Fire Rate", "Higher = Faster Shooting", 500, 10, function(value)
+        Config.GunMods.FireRate = value/100
+        Notification.ValueChanged("Fire Rate", value, "%")
+    end)
+
+    GunModsSection:NewSlider("🔫 Reload Time", "Lower = Faster Reload", 100, 0, function(value)
+        Config.GunMods.ReloadTime = value/100
+        Notification.ValueChanged("Reload Time", value, "%")
+    end)
+
+    GunModsSection:NewSlider("🔫 Damage Drop Off", "Lower = More Range", 100, 0, function(value)
+        Config.GunMods.DamageDropOff = value
+        Notification.ValueChanged("Damage Drop Off", value, "%")
+    end)
+
+    GunModsSection:NewToggle("🔫 Force Auto", "Make all guns automatic", function(state)
+        Config.GunMods.IsAuto = state
+        Notification.FeatureToggle("Force Auto", state)
+    end)
+
+    GunModsSection:NewToggle("🔫 Rapid Shotguns", "Remove shotgun delay", function(state)
+        Config.GunMods.DelayedShell = not state
+        Notification.FeatureToggle("Rapid Shotguns", state)
+    end)
+end
+
+--- [ Aimbot Tab ] ---
+local function SetupAimbotTab()
+    local AimbotTab = Window:NewTab("Aimbot")
+    local AimbotMainSection = AimbotTab:NewSection("🎯 Main Settings")
+    local AimbotVisualSection = AimbotTab:NewSection("🌈 Visual Settings")
+
+    -- Initialize FOV Circle
+    local success, err = pcall(function()
+        Config.State.FOVCircle = Drawing.new("Circle")
+        Config.State.FOVCircle.Thickness = 2
+        Config.State.FOVCircle.NumSides = 12
+        Config.State.FOVCircle.Radius = Config.Aimbot.FOV
+        Config.State.FOVCircle.Filled = false
+        Config.State.FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+        Config.State.FOVCircle.Visible = false
+    end)
+
+    if not success then
+        Notification.Error("Failed to create FOV circle: "..tostring(err))
+        Config.State.FOVCircle = nil
+    end
+
+    AimbotMainSection:NewToggle("🎯 Enable Aimbot", "Automatically aim at enemies", function(state)
+        Config.Aimbot.Enabled = state
+        if Config.State.FOVCircle then
+            Config.State.FOVCircle.Visible = state
+        end
+        Notification.FeatureToggle("Aimbot", state)
+    end)
+
+    AimbotMainSection:NewSlider("🎯 FOV Size", "Aimbot field of view", 500, 50, function(value)
+        Config.Aimbot.FOV = value
+        if Config.State.FOVCircle then
+            Config.State.FOVCircle.Radius = value
+        end
+        Notification.ValueChanged("Aimbot FOV", value)
+    end)
+
+    AimbotMainSection:NewDropdown("🎯 Target Part", "Choose which part to aim at", {"Head", "UpperTorso", "HumanoidRootPart"}, function(option)
+        Config.Aimbot.TargetPart = option
+        Notification.ValueChanged("Target Part", option)
+    end)
+
+    AimbotVisualSection:NewToggle("🌈 Rainbow FOV", "Make FOV circle colorful", function(state)
+        Config.Aimbot.RainbowFOV = state
+        Notification.FeatureToggle("Rainbow FOV", state)
+    end)
+end
+
+--- [ Movement Tab ] ---
+local function SetupMovementTab()
+    local MovementTab = Window:NewTab("Movement")
+    local SpeedSection = MovementTab:NewSection("🏃 Speed Hacks")
+    local FlySection = MovementTab:NewSection("✈️ Fly Hacks")
+    local JumpSection = MovementTab:NewSection("🦘 Jump Hacks")
+
+    SpeedSection:NewToggle("🏃 Speed Hack", "Move faster than normal", function(state)
+        Config.Movement.Speed.Enabled = state
+        Notification.FeatureToggle("Speed Hack", state)
+    end)
+
+    SpeedSection:NewSlider("🏃 Speed Amount", "How fast you move", 100, 16, function(value)
+        Config.Movement.Speed.Amount = value
+        Notification.ValueChanged("Speed", value)
+    end)
+
+    FlySection:NewToggle("✈️ Fly Hack", "Fly around the map", function(state)
+        Config.Movement.Fly.Enabled = state
+        Notification.FeatureToggle("Fly Hack", state)
+    end)
+
+    FlySection:NewSlider("✈️ Fly Speed", "How fast you fly", 100, 10, function(value)
+        Config.Movement.Fly.Speed = value
+        Notification.ValueChanged("Fly Speed", value)
+    end)
+
+    JumpSection:NewToggle("🦘 High Jump", "Jump much higher", function(state)
+        Config.Movement.Jump.Enabled = state
+        if state and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = Config.Movement.Jump.Amount
+        end
+        Notification.FeatureToggle("High Jump", state)
+    end)
+
+    JumpSection:NewSlider("🦘 Jump Power", "How high you jump", 200, 50, function(value)
+        Config.Movement.Jump.Amount = value
+        if Config.Movement.Jump.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.JumpPower = value
+        end
+        Notification.ValueChanged("Jump Power", value)
+    end)
+
+    JumpSection:NewToggle("🦘 Infinite Jump", "Jump in mid-air", function(state)
+        Config.Movement.Jump.Infinite = state
+        Notification.FeatureToggle("Infinite Jump", state)
+    end)
+end
+
+--> [< Core Functions >] <--
+
+local function IsWallBetween(targetCharacter)
+    local targetHead = targetCharacter:FindFirstChild("Head")
+    if not targetHead then return true end
+
+    local origin = camera.CFrame.Position
+    local direction = (targetHead.Position - origin).unit * (targetHead.Position - origin).magnitude
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, targetCharacter}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+    local raycastResult = workspace:Raycast(origin, direction, raycastParams)
+    return raycastResult and raycastResult.Instance ~= nil
+end
+
+local function GetNearestPlayer()
+    local nearestPlayer = nil
+    local shortestCursorDistance = Config.Aimbot.FOV
+    local shortestPlayerDistance = math.huge
+    local cameraPos = camera.CFrame.Position
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local headPos, headVisible = camera:WorldToViewportPoint(head.Position)
+            local screenPos = Vector2.new(headPos.X, headPos.Y)
+            local mousePos = Vector2.new(mouse.X, mouse.Y)
+            local cursorDistance = (screenPos - mousePos).Magnitude
+            local playerDistance = (head.Position - cameraPos).Magnitude
+
+            if cursorDistance < shortestCursorDistance and headPos.Z > 0 and headVisible then
+                if not IsWallBetween(player.Character) then
+                    if playerDistance < shortestPlayerDistance then
+                        shortestPlayerDistance = playerDistance
+                        shortestCursorDistance = cursorDistance
+                        nearestPlayer = player
+                    end
+                end
+            end
+        end
+    end
+
+    return nearestPlayer
+end
+
+local function PredictPlayerPosition(player)
+    if player and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("HumanoidRootPart") then
+        local head = player.Character.Head
+        local hrp = player.Character.HumanoidRootPart
+        local velocity = hrp.Velocity
+        local predictedPosition = head.Position + (velocity * Config.Aimbot.Prediction)
+        return predictedPosition
+    end
+    return nil
+end
+
+local function AimAtPlayer(player)
+    local predictedPosition = PredictPlayerPosition(player)
+    if predictedPosition then
+        camera.CFrame = CFrame.new(camera.CFrame.Position, predictedPosition)
+    end
+end
+
+local function NoclipLoop()
+    if Config.Movement.Noclip.Enabled and LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end
+
+local function FlyLoop()
+    if Config.Movement.Fly.Enabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local cam = workspace.CurrentCamera.CFrame
+        
+        local flyDirection = Vector3.new()
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            flyDirection = flyDirection + (cam.LookVector * Config.Movement.Fly.Speed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            flyDirection = flyDirection - (cam.LookVector * Config.Movement.Fly.Speed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            flyDirection = flyDirection + (cam.RightVector * Config.Movement.Fly.Speed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            flyDirection = flyDirection - (cam.RightVector * Config.Movement.Fly.Speed)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.E) then
+            flyDirection = flyDirection + Vector3.new(0, Config.Movement.Fly.Speed, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+            flyDirection = flyDirection - Vector3.new(0, Config.Movement.Fly.Speed, 0)
+        end
+        
+        hrp.Velocity = flyDirection
+        LocalPlayer.Character.Humanoid.PlatformStand = true
+    elseif LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.PlatformStand = false
+    end
+end
+
+local function InfiniteJump()
+    if Config.Movement.Jump.Infinite and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end
+
+local function ApplyGunMods()
+    if Config.GunMods.Enabled and LocalPlayer.Character then
+        local folder = LocalPlayer.Character:FindFirstChildWhichIsA("Tool")
+        if folder and folder:FindFirstChild("Configuration") then
+            for _, v in ipairs(folder.Configuration:GetChildren()) do
+                if v.Name == "FireRate" then
+                    v.Value = v.Value * Config.GunMods.FireRate
+                elseif v.Name == "reloadTime" then
+                    v.Value = Config.GunMods.ReloadTime
+                elseif v.Name == "DamageDropoff" then
+                    v.Value = Config.GunMods.DamageDropOff
+                elseif v.Name == "isAuto" then
+                    v.Value = Config.GunMods.IsAuto
+                elseif v.Name == "DelayedShell" then
+                    v.Value = Config.GunMods.DelayedShell
+                end
+            end
+        end
+    end
+end
+
+--> [< Main Loop >] <--
+local function MainLoop()
+    -- Aimbot
+    if Config.Aimbot.Enabled and Config.State.FOVCircle then
+        Config.State.FOVCircle.Position = Vector2.new(mouse.X, mouse.Y + 50)
+
+        if Config.Aimbot.RainbowFOV then
+            Config.State.Hue = Config.State.Hue + Config.Aimbot.RainbowSpeed
+            if Config.State.Hue > 1 then Config.State.Hue = 0 end
+            Config.State.FOVCircle.Color = Color3.fromHSV(Config.State.Hue, 1, 1)
+        end
+
+        if Config.Aimbot.Aiming then
+            if Config.Aimbot.CurrentTarget and Config.Aimbot.CurrentTarget.Character and IsWallBetween(Config.Aimbot.CurrentTarget.Character) then
+                Config.Aimbot.CurrentTarget = nil
+            end
+
+            if not Config.Aimbot.CurrentTarget then
+                Config.Aimbot.CurrentTarget = GetNearestPlayer()
+            end
+
+            if Config.Aimbot.CurrentTarget and Config.Aimbot.CurrentTarget.Character then
+                AimAtPlayer(Config.Aimbot.CurrentTarget)
+            end
+        else
+            Config.Aimbot.CurrentTarget = nil
+        end
+    end
+    
+    -- Gun Mods
+    ApplyGunMods()
+    
+    -- Speed Hack
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = Config.Movement.Speed.Enabled and Config.Movement.Speed.Amount or 16
+        LocalPlayer.Character.Humanoid.JumpPower = Config.Movement.Jump.Enabled and Config.Movement.Jump.Amount or 50
+    end
+    
+    -- Movement hacks
+    NoclipLoop()
+    FlyLoop()
+    InfiniteJump()
+end
+
+--> [< Initialization >] <--
+local function Initialize()
+    SetupHomeTab()
+    SetupGunModsTab()
+    SetupAimbotTab()
+    SetupMovementTab()
+    
+    -- Mouse inputs for aimbot
+    mouse.Button2Down:Connect(function()
+        if Config.Aimbot.Enabled then
+            Config.Aimbot.Aiming = true
+        end
+    end)
+
+    mouse.Button2Up:Connect(function()
+        if Config.Aimbot.Enabled then
+            Config.Aimbot.Aiming = false
+        end
+    end)
+
+    -- Anti-AFK
+    local VirtualUser = game:GetService("VirtualUser")
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+
+    -- Main loop connection
+    RunService.RenderStepped:Connect(MainLoop)
+    
+    Config.State.Initialized = true
+    Notification.ScriptLoaded()
+end
+
+Initialize()
